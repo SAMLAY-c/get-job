@@ -222,7 +222,7 @@ public class Boss {
                     .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
                     .setTimeout(15_000));
             // 等待列表容器出现，确保页面完成首屏渲染
-            page.waitForSelector("//ul[contains(@class, 'rec-job-list')]", new Page.WaitForSelectorOptions().setTimeout(60_000));
+            page.waitForSelector(JOB_LIST_CONTAINER, new Page.WaitForSelectorOptions().setTimeout(60_000));
 
             // 1. 基于 footer 出现滚动到底，确保加载全部岗位
             int lastCount = -1;
@@ -241,7 +241,7 @@ public class Boss {
                 page.evaluate("() => window.scrollBy(0, Math.floor(window.innerHeight * 1.5))");
 
                 // 获取卡片数量变化，判断是否需要强制触底
-                Locator cardsProbe = page.locator("//ul[contains(@class, 'rec-job-list')]//li[contains(@class, 'job-card-box')]");
+                Locator cardsProbe = page.locator(JOB_LIST_SELECTOR);
                 int currentCount = cardsProbe.count();
                 if (currentCount == lastCount) {
                     stableTries++;
@@ -256,7 +256,7 @@ public class Boss {
                 }
             }
             // 统计最终岗位数量
-            Locator cardsFinal = page.locator("//ul[contains(@class, 'rec-job-list')]//li[contains(@class, 'job-card-box')]");
+            Locator cardsFinal = page.locator(JOB_LIST_SELECTOR);
             int loadedCount = cardsFinal.count();
             log.info("【{}】岗位已全部加载，总数:{}", keyword, loadedCount);
             progressCallback.accept("岗位加载完成：" + keyword, 0, loadedCount);
@@ -266,7 +266,7 @@ public class Boss {
             PlaywrightUtil.sleep(1);
 
             // 3. 逐个遍历所有岗位
-            Locator cards = page.locator("//ul[contains(@class, 'rec-job-list')]//li[contains(@class, 'job-card-box')]");
+            Locator cards = page.locator(JOB_LIST_SELECTOR);
             int count = cards.count();
             for (int i = 0; i < count; i++) {
                 // 检查是否需要停止
@@ -276,7 +276,7 @@ public class Boss {
                 }
 
                 // 重新获取卡片，避免元素过期
-                cards = page.locator("//ul[contains(@class, 'rec-job-list')]//li[contains(@class, 'job-card-box')]");
+                cards = page.locator(JOB_LIST_SELECTOR);
                 // 在点击卡片时同步等待岗位详情接口返回，随后解析并入库
                 Response detailResp = null;
                 try {
