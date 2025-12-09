@@ -641,10 +641,32 @@ public class Boss {
             return;
         }
         String detailUrl = "https://www.zhipin.com" + href;
-        // 2. 在新窗口打开详情页
-        Page detailPage = page.context().newPage();
-        detailPage.navigate(detailUrl);
-        PlaywrightUtil.sleep(1);
+        // 2. 在新窗口打开详情页，添加重试机制
+        Page detailPage = null;
+        int detailRetryCount = 0;
+        boolean detailLoaded = false;
+
+        while (detailRetryCount < 3 && !detailLoaded) {
+            try {
+                detailPage = page.context().newPage();
+                detailPage.navigate(detailUrl, new Page.NavigateOptions()
+                    .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
+                    .setTimeout(15_000));
+                PlaywrightUtil.sleep(2);
+                detailLoaded = true;
+            } catch (Exception e) {
+                detailRetryCount++;
+                log.warn("导航到职位详情页失败，重试次数: {}/{}, 错误: {}", detailRetryCount, 3, e.getMessage());
+                if (detailPage != null) {
+                    detailPage.close();
+                }
+                if (detailRetryCount >= 3) {
+                    log.error("导航到职位详情页最终失败: {}", detailUrl);
+                    return;
+                }
+                PlaywrightUtil.sleep(3);
+            }
+        }
 
         // 3. 查找"立即沟通"按钮
         Locator chatBtn = detailPage.locator("a.btn-startchat, a.op-btn-chat");
