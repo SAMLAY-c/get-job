@@ -323,8 +323,8 @@ public class AiService {
     @Transactional
     protected AiEntity createDefaultConfig() {
         AiEntity aiEntity = new AiEntity();
-        aiEntity.setIntroduce("请在此填写您的技能介绍");
-        aiEntity.setPrompt("请在此填写AI提示词模板");
+        aiEntity.setIntroduce("我是天津师范大学的经济学大三学生，具备扎实的经济学理论基础和数据分析能力。对AI产品和互联网行业充满热情，希望通过实习将经济学理论与产品实践相结合。我的优势包括：1）熟悉市场分析和用户需求洞察，具备良好的逻辑思维；2）掌握基础的Python编程和数据处理技能，能进行简单的数据分析；3）学习能力强，对新技术和产品趋势保持敏感；4）具备良好的沟通表达能力和团队协作精神。");
+        aiEntity.setPrompt("请基于以下信息生成简洁友好的中文打招呼语，突出求职者与公司/岗位的匹配度和诚意：\n个人介绍：%s\n关键词：%s\n职位名称：%s\n职位描述：%s\n参考语：%s\n\n要求：1）开头直接表达对岗位的兴趣和对公司的认可；2）突出经济学背景与产品的结合点，强调数据分析和用户需求洞察优势；3）说明为什么选择这家公司（结合公司业务特点）；4）强调快速学习能力和团队协作精神；5）体现对行业和公司文化的了解；6）避免套话，真诚自然；7）控制在250字以内。");
         aiEntity.setCreatedAt(java.time.LocalDateTime.now());
         aiEntity.setUpdatedAt(java.time.LocalDateTime.now());
         aiMapper.insert(aiEntity);

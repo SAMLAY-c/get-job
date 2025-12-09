@@ -218,25 +218,73 @@ public class Boss {
             String encodedKeyword = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
 
             String url = searchUrl + "&query=" + encodedKeyword;
-            page.navigate(url, new Page.NavigateOptions()
-                    .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
-                    .setTimeout(15_000));
+
+            // 导航到搜索页面，增加重试机制以应对反爬检测
+            int searchRetryCount = 0;
+            boolean searchLoaded = false;
+            while (searchRetryCount < 3 && !searchLoaded) {
+                try {
+                    log.debug("尝试导航到搜索页面，重试次数: {}/{}", searchRetryCount + 1, 3);
+
+                    // 清理可能的扩展错误和网络问题
+                    try {
+                        page.evaluate("() => { console.clear(); }");
+                    } catch (Exception ignore) {}
+
+                    page.navigate(url, new Page.NavigateOptions()
+                            .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
+                            .setTimeout(20_000)); // 增加超时时间
+
+                    PlaywrightUtil.sleep(3); // 增加等待时间让页面完全加载
+                    searchLoaded = true;
+                    log.debug("搜索页面导航成功");
+                } catch (Exception e) {
+                    searchRetryCount++;
+                    log.warn("导航到搜索页面失败，重试次数: {}/{}, 错误: {}", searchRetryCount, 3, e.getMessage());
+
+                    if (searchRetryCount >= 3) {
+                        log.error("导航到搜索页面最终失败: {}", url);
+                        throw new RuntimeException("搜索页面导航失败，已重试3次: " + e.getMessage(), e);
+                    }
+
+                    // 等待更长时间后重试
+                    PlaywrightUtil.sleep(5);
+
+                    // 检查是否需要停止
+                    if (shouldStopCallback.get()) {
+                        progressCallback.accept("用户取消投递", 0, 0);
+                        return;
+                    }
+                }
+            }
 
             // 等待页面稳定并重试机制
             int retryCount = 0;
             boolean jobListLoaded = false;
             while (retryCount < 3 && !jobListLoaded) {
                 try {
+                    // 首先等待网络空闲，确保资源加载完成
+                    try {
+                        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE,
+                            new Page.WaitForLoadStateOptions().setTimeout(15_000));
+                    } catch (Exception e) {
+                        log.debug("等待网络空闲超时，继续等待页面元素: {}", e.getMessage());
+                    }
+
                     // 等待列表容器出现，确保页面完成首屏渲染
-                    page.waitForSelector(JOB_LIST_CONTAINER, new Page.WaitForSelectorOptions().setTimeout(20_000));
+                    page.waitForSelector(JOB_LIST_CONTAINER, new Page.WaitForSelectorOptions().setTimeout(25_000));
                     jobListLoaded = true;
+
+                    // 额外等待2秒让页面完全稳定
+                    PlaywrightUtil.sleep(2);
+
                 } catch (Exception e) {
                     retryCount++;
                     log.warn("等待职位列表容器失败，重试次数: {}/{}", retryCount, 3);
                     if (retryCount >= 3) {
                         throw e;
                     }
-                    PlaywrightUtil.sleep(2);
+                    PlaywrightUtil.sleep(3); // 增加重试间隔
                 }
             }
 

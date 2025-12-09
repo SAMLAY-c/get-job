@@ -130,6 +130,16 @@ public class PlaywrightManager {
                             "--no-first-run",
                             "--no-zygote",
                             "--disable-gpu",
+                            "--disable-extensions", // 禁用扩展避免 chrome-extension://invalid 错误
+                            "--disable-plugins", // 禁用插件
+                            "--disable-images", // 可选：禁用图片加载以提升速度
+                            "--disable-javascript-harmony-shipping", // 优化JS执行
+                            "--disable-background-timer-throttling", // 防止后台定时器被限制
+                            "--disable-backgrounding-occluded-windows", // 防止后台窗口被限制
+                            "--disable-renderer-backgrounding", // 防止渲染器被限制
+                            "--disable-features=TranslateUI,BlinkGenPropertyTrees", // 禁用不需要的功能
+                            "--disable-ipc-flooding-protection", // 禁用IPC洪水保护
+                            "--disable-web-security", // 临时禁用网络安全检查（仅在受控环境）
                             "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36" // 伪装User-Agent
                     )));
             log.info("✓ Chrome浏览器已启动 (调试端口: {})", CDP_PORT);
@@ -138,13 +148,43 @@ public class PlaywrightManager {
             context = browser.newContext(new Browser.NewContextOptions()
                     .setViewportSize(1280, 800) // 设置一个常见的屏幕分辨率
                     .setUserAgent(
-                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"));
+                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
+                    .setIgnoreHTTPSErrors(true) // 忽略HTTPS错误
+                    .setAcceptDownloads(false) // 禁用下载以避免意外弹窗
+                    .setJavaScriptEnabled(true) // 启用JS
+                    .setHasTouch(false) // 禁用触屏
+                    .setIsMobile(false) // 非移动设备
+                    );
 
             // 【关键3】在页面加载前注入脚本，彻底抹除webdriver特征
             context.addInitScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
             context.addInitScript("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})");
             context.addInitScript("Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']})");
             context.addInitScript("window.chrome = {runtime: {}}");
+
+            // 添加额外的优化脚本
+            context.addInitScript("""
+                // 禁用开发者工具的警告信息
+                const originalLog = console.log;
+                console.log = function(...args) {
+                    // 过滤掉 chrome-extension 相关的错误信息
+                    if (args.length > 0 && typeof args[0] === 'string' &&
+                        args[0].includes('chrome-extension://')) {
+                        return;
+                    }
+                    return originalLog.apply(console, args);
+                };
+
+                // 优化字体加载错误
+                document.addEventListener('error', function(e) {
+                    if (e.target && e.target.tagName === 'LINK' &&
+                        e.target.rel === 'stylesheet' && e.target.href.includes('font')) {
+                        e.target.onload = function() {
+                            // 忽略字体加载错误
+                        };
+                    }
+                }, true);
+                """);
 
             log.info("✓ BrowserContext已创建（所有平台共享）");
             log.info("✓ 已注入反检测脚本，隐藏webdriver特征");
