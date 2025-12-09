@@ -112,22 +112,42 @@ public class PlaywrightManager {
             playwright = Playwright.create();
             log.info("✓ Playwright引擎已启动");
 
-            // 创建浏览器实例，使用固定CDP端口7866，最大化启动
+            // 创建浏览器实例，使用本机Chrome和反检测配置
             browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
-                    .setHeadless(false) // 非无头模式，可视化调试
-                    .setSlowMo(50) // 放慢操作速度，便于调试
+                    .setHeadless(false) // 必须是有头模式
+                    .setChannel("chrome") // 【关键1】强制使用本机安装的 Google Chrome，而不是 Playwright 自带的 Chromium
+                    .setSlowMo(100) // 放慢操作速度，更像真实用户
                     .setArgs(List.of(
-                            "--remote-debugging-port=" + CDP_PORT, // 使用固定CDP端口
-                            "--start-maximized" // 最大化启动窗口
+                            "--disable-blink-features=AutomationControlled", // 【关键2】禁用自动化控制特征
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-infobars",
+                            "--window-position=0,0",
+                            "--ignore-certificate-errors",
+                            "--ignore-certificate-errors-spki-list",
+                            "--disable-dev-shm-usage",
+                            "--disable-accelerated-2d-canvas",
+                            "--no-first-run",
+                            "--no-zygote",
+                            "--disable-gpu",
+                            "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36" // 伪装User-Agent
                     )));
             log.info("✓ Chrome浏览器已启动 (调试端口: {})", CDP_PORT);
 
             // 创建共享的BrowserContext（所有平台在同一个窗口的不同标签页中）
             context = browser.newContext(new Browser.NewContextOptions()
-                    .setViewportSize(null) // 不设置固定视口，使用浏览器窗口实际大小
+                    .setViewportSize(1280, 800) // 设置一个常见的屏幕分辨率
                     .setUserAgent(
                             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"));
+
+            // 【关键3】在页面加载前注入脚本，彻底抹除webdriver特征
+            context.addInitScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
+            context.addInitScript("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})");
+            context.addInitScript("Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']})");
+            context.addInitScript("window.chrome = {runtime: {}}");
+
             log.info("✓ BrowserContext已创建（所有平台共享）");
+            log.info("✓ 已注入反检测脚本，隐藏webdriver特征");
 
             // 顺序创建所有Page（避免并发创建Page导致的竞态条件）
             log.info("开始创建所有平台的Page...");
@@ -147,17 +167,14 @@ public class PlaywrightManager {
             zhilianPage.setDefaultTimeout(DEFAULT_TIMEOUT);
             log.info("✓ 智联招聘 Page已创建");
 
-            // 并发执行各平台的初始化逻辑（导航、Cookie加载等）
-            log.info("开始并发初始化所有平台...");
-            CompletableFuture<Void> bossFuture = CompletableFuture.runAsync(this::setupBossPlatform);
-            CompletableFuture<Void> liepinFuture = CompletableFuture.runAsync(this::setupLiepinPlatform);
-            CompletableFuture<Void> job51Future = CompletableFuture.runAsync(this::setup51jobPlatform);
-            CompletableFuture<Void> zhilianFuture = CompletableFuture.runAsync(this::setupZhilianPlatform);
+            // 串行执行各平台的初始化逻辑（避免竞态条件）
+            log.info("开始串行初始化所有平台...");
+            setupBossPlatform();
+            setupLiepinPlatform();
+            setup51jobPlatform();
+            setupZhilianPlatform();
 
-            // 等待所有平台初始化完成
-            CompletableFuture.allOf(bossFuture, liepinFuture, job51Future, zhilianFuture).join();
-
-            log.info("✓ 浏览器自动化引擎初始化完成（所有平台已并发启动）");
+            log.info("✓ 浏览器自动化引擎初始化完成（所有平台已串行启动）");
             log.info("========================================");
         } catch (Exception e) {
             log.error("✗ 浏览器自动化引擎初始化失败", e);
