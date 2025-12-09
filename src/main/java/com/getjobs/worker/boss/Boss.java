@@ -221,8 +221,24 @@ public class Boss {
             page.navigate(url, new Page.NavigateOptions()
                     .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
                     .setTimeout(15_000));
-            // 等待列表容器出现，确保页面完成首屏渲染
-            page.waitForSelector(JOB_LIST_CONTAINER, new Page.WaitForSelectorOptions().setTimeout(60_000));
+
+            // 等待页面稳定并重试机制
+            int retryCount = 0;
+            boolean jobListLoaded = false;
+            while (retryCount < 3 && !jobListLoaded) {
+                try {
+                    // 等待列表容器出现，确保页面完成首屏渲染
+                    page.waitForSelector(JOB_LIST_CONTAINER, new Page.WaitForSelectorOptions().setTimeout(20_000));
+                    jobListLoaded = true;
+                } catch (Exception e) {
+                    retryCount++;
+                    log.warn("等待职位列表容器失败，重试次数: {}/{}", retryCount, 3);
+                    if (retryCount >= 3) {
+                        throw e;
+                    }
+                    PlaywrightUtil.sleep(2);
+                }
+            }
 
             // 1. 基于 footer 出现滚动到底，确保加载全部岗位
             int lastCount = -1;
